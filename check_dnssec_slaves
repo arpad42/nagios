@@ -1,0 +1,83 @@
+#!/bin/bash
+
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+DOMAIN=""
+PRIMARY=""
+SECONDARIES=()
+
+### Helper functions
+critical()
+{
+	echo "CRITICAL - $1"
+	exit 2
+}
+
+
+get_soa_rrsig()
+{
+	dig "@$1" +tcp +dnssec +short "$DOMAIN" RRSIG | grep "^SOA "
+}
+
+unknown()
+{
+	echo "UNKNOWN - $1"
+	exit 3
+}
+
+usage()
+{
+	cat <<EOF
+Usage: $(basename $0) <options>
+
+Options:
+	-d, --domain DOMAIN	The domain to check. Mandatory.
+	-h, --help		Shows this help.
+	-p, --primary ADDR	The primary DNS server. Mandatory.
+	-s, --secondary ADDR	Secondary DNS server. You can use this option multiple times.
+
+The script checks if the domain's SOA record has the same RRSIG record on every DNS server.
+EOF
+
+	exit 0
+}
+
+### Parameter parsing
+while (( $# > 0 ))
+do
+	case "$1" in
+		"-d" | "--domain" ) DOMAIN="$2"; shift ;;
+		"--domain="*) DOMAIN="${1#*=}" ;;
+		"-h" | "--help" ) usage ;;
+		"-p" | "--primary" ) PRIMARY="$2"; shift ;;
+		"--primary="*) PRIMARY="${1#*=}" ;;
+		"-s" | "--secondary" ) SECONDARIES+=( "$2" ); shift ;;
+		"--secondary="*) SECONDARIES+=( "${1#*=}" ) ;;
+		* ) unknown "Unknown parameter! [$1]" ;;
+	esac
+	shift
+done
+
+[[ -z "$DOMAIN" ]] && unknown "Domain name is missing!"
+[[ -z "$PRIMARY" ]] && unknown "Primary DNS server is missing!"
+
+### Primary information
+PRIMARY_RRSIG="$(get_soa_rrsig "$PRIMARY")"
+[[ -z "$PRIMARY_RRSIG" ]] && critical "Primary RRSIG is empty!"
+
+### Check secondaries
+BAD_SERVERS=()
+for SECONDARY in "${SECONDARIES[@]}"
+do
+	SECONDARY_RRSIG="$(get_soa_rrsig "$SECONDARY")"
+	[[ "$PRIMARY_RRSIG" != "$SECONDARY_RRSIG" ]] && BAD_SERVERS+=( "$SECONDARY" )
+done
+
+if (( "${#BAD_SERVERS[@]}" == 0 ))
+then
+	echo "OK - ${#SECONDARIES[@]} server(s) are in sync"
+	exit 0
+else
+	critical "${#BAD_SERVERS[@]} server(s) are out sync: $( IFS=","; echo "${BAD_SERVERS[*]}"; )"
+fi

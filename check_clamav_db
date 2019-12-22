@@ -1,0 +1,42 @@
+#!/usr/bin/env ruby
+
+require 'time'
+
+# FIXME: optionparser
+WARNING = 2 * 86400
+CRITICAL = 3 * 86400
+
+CLAMAV_DIR = "/var/lib/clamav"
+SIGTOOL = "/usr/bin/sigtool"
+
+CODE_TO_STR = [ "OK", "WARNING", "CRITICAL" ]
+
+daily = nil
+daily = "#{CLAMAV_DIR}/daily.cld" if File.exist?( "#{CLAMAV_DIR}/daily.cld" )
+daily = "#{CLAMAV_DIR}/daily.cvd" if File.exist?( "#{CLAMAV_DIR}/daily.cvd" )
+
+if daily.nil?
+	puts( "No daily database file found!" )
+	exit( 2 )
+end
+
+created = nil
+retcode = 0
+retstr = "OK"
+
+%x,sigtool -i '#{daily}' 2>&-,.each_line do | line |
+	created = Time.parse( $1 ) if line.match( /^Build time:\s*(.+)$/ )
+end
+
+if created.nil?
+	puts( "Failed to get the database creation timestamp!" )
+	exit( 2 )
+end
+
+age = Time.now.to_i - created.to_i
+
+retcode = 1 if age > WARNING
+retcode = 2 if age > CRITICAL
+
+puts( "#{CODE_TO_STR[ retcode ]} - Database is #{sprintf( "%.2f", age.to_f / 86400 )} days old" )
+exit( retcode )

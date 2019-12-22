@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+MDSTAT = "/proc/mdstat"
+
+arrays = {}
+last_array = nil
+
+retcode = 0
+
+File.foreach( MDSTAT ) do | line |
+	if( line.start_with?( "md" ) )
+		last_array = line.split( " " ).first
+		arrays[ last_array ] = "ok"
+		next
+	end
+
+	if( line.include?( " blocks super " ) )
+		if( line.split( " " ).last.include?( "_" ) )
+			arrays[ last_array ] = "DEGRADED" if( line.split( " " ).last.include?( "_" ) )
+			retcode = 2
+		end
+		next
+	end
+
+	if( line.match( /\s(\S+%)/ ) )
+		arrays[ last_array ] = "RESYNC - #{$1}"
+		retcode = 1 unless retcode == 2
+	end
+end
+
+puts( arrays.to_a.sort { | a, b | a[ 0 ].delete( "md" ).to_i <=> b[ 0 ].delete( "md" ).to_i }.map { | a | "#{a[ 0 ]}: #{a[ 1 ]}" }.join( "; " ) )
+
+exit( retcode )

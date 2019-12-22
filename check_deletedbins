@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Try to avoid to use the lsof, because it doesn't available on all systems.
+
+# NOTE:
+#  This script must to run as root!
+#  The following line in the sudoers file probably do the trick.
+#    nrpe	ALL=(ALL) NOPASSWD: /usr/lib64/nagios/plugins/check_deletedbins
+#  You must also configure this check as follows.
+#    command[check_deletedbins]=/usr/bin/sudo /usr/lib64/nagios/plugins/check_deletedbins
+
+### Helper functions
+# Params: retcode message
+nagios_output()
+{
+	echo "$2"
+	exit "$1"
+}
+
+# Params: msg
+ok() { nagios_output 0 "OK"; }
+warning() { nagios_output 1 "WARNING: $1"; }
+critical() { nagios_output 2 "ERROR: $1"; }
+unknown() { nagios_output 3 "UNKNOWN: $1"; }
+
+# Params: string1 string2
+append_string()
+{
+	[[ -n "$1" ]] && echo "$1, $2" || echo "$2"
+}
+
+# Check if we are roots
+(( "$(id -u)" != 0 )) && unknown "You must be root to run this script!"
+
+# Store the results
+declare -A DELETED_BINARIES
+
+# Search for deleted binaries or libraries
+REGEXP="^/proc/([0-9]+)/maps:[0-9a-f]+-[0-9a-f]+ (\S{4}) [^/]*(/.*?) \(deleted\)$"
+while read LINE
+do
+	[[ "$LINE" =~ $REGEXP ]] || continue
+	PID="${BASH_REMATCH[1]}"
+	PERMS="${BASH_REMATCH[2]}"
+	BIN="${BASH_REMATCH[3]}"
+
+	if [[ "$PERMS" =~ x ]]
+	then
+		PROCNAME="$(grep ^Name: /proc/$PID/status 2>&-)"
+		(( $? != 0 )) && continue
+		PROCNAME="${PROCNAME##Name:	}"
+
+		# This is a false alarm on CentOS 7
+		[[ "$BIN" =~ ^/tmp/ && "$PROCNAME" == "tuned" ]] && continue
+
+		DELETED_BINARIES["$BIN"]="$(append_string "${DELETED_BINARIES[$BIN]}" "$PROCNAME[$PID]")"
+	fi
+done < <(grep ' (deleted)$' /proc/*/maps 2>&-)
+
+# If nothing found, we are okay
+(( "${#DELETED_BINARIES[@]}" == 0 )) && ok
+
+# Create the return value (sort the output)
+RETVAL=()
+
+while read BIN
+do
+	RETVAL+=( "$BIN: ${DELETED_BINARIES[$BIN]};" )
+done <<< "$(IFS=$'\n'; echo "${!DELETED_BINARIES[*]}" | sort)"
+
+critical "$(IFS=" "; echo "${RETVAL[*]}")"

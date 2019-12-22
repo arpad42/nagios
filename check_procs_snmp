@@ -1,0 +1,97 @@
+#!/usr/bin/env ruby
+# encoding: UTF-8
+
+require 'optparse'
+require 'snmp'
+
+$debug = false
+
+OID = "1.3.6.1.2.1.25.4.2.1.4"
+
+cmdline = OptionParser.new do | parser |
+	parser.banner = "Check running procs on remote machine using SNMP"
+	parser.separator( "" )
+	parser.separator( "Options:" )
+
+	parser.on( "-c", "--critical <N:M>", "Generate alert if metric is outside of this range." ) do | critical |
+		$critical = critical.split( ":" ).map { | x | x.to_i }
+	end
+
+	parser.on( "-C", "--command <COMMAND>", "Search for this command (no path)" ) do | command |
+		$command = command
+	end
+
+	parser.on( "-d", "--debug", "Shows debug information on stdout (only for testing" ) do | debug |
+		$debug = true
+	end
+
+	parser.on( "-f", "--full <REGEXP>", "Search for full command line matches to the regexp (PCRE)" ) do | full |
+		$full_str = full
+		$full = Regexp.new( full )
+	end
+
+	parser.on( "-H", "--host-address <IP or hostname>", "Host to check." ) do | host |
+		$host = host
+	end
+
+	parser.on( "-h", "--help", "Shows this help." ) do
+		puts parser
+		exit
+	end
+
+	parser.on( "-w", "--warning <N:M>", "Generate warning if metric is outside of this range." ) do | warning |
+		$warning = warning.split( ":" ).map { | x | x.to_i }
+	end
+
+end
+
+cmdline.parse!( ARGV )
+
+if $critical.nil?
+	$stderr.puts "ERROR: Missing --critical!"
+	exit 3
+end
+
+if $warning.nil?
+	$stderr.puts "ERROR: Missing --warning!"
+	exit 3
+end
+
+if $command and $full
+	$stderr.puts "ERROR: --command and --full are mutually exclusive!"
+	exit 3
+end
+
+found = 0
+SNMP::Manager.open( :host => $host ) do | snmp |
+	snmp.walk( OID ) do | vb |
+		cmdline = vb.value
+		# it's a heuristic only...
+		command = File.basename( cmdline.split( " " ).first ).gsub( /:$/, "" )
+
+		next if $command and not $command == command
+		next if $full and not cmdline.match( $full )
+
+		puts "CMDLINE: #{cmdline}, COMMAND: #{command}" if $debug
+		found += 1
+	end
+end
+
+exit_code = 0
+text = "OK"
+
+if found < $warning.first or found > $warning.last
+	exit_code = 1
+	text = "WARN"
+end
+
+if found < $critical.first or found > $critical.last
+	exit_code = 2
+	text = "CRIT"
+end
+
+arg_text = " with command name '#{$command}'" if $command
+arg_text = " with command line matches to '#{$full_str}'" if $full
+
+puts "PROCS #{text}: #{found} process#{arg_text}"
+exit exit_code

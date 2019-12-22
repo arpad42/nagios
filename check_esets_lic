@@ -1,0 +1,40 @@
+#!/bin/bash
+
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+WARNING="45"
+CRITICAL="7"
+ESETS_LIC="/opt/eset/esets/sbin/esets_lic"
+
+NOW="$(date "+%s")"
+WARNING_SEC="$(( WARNING * 86400 ))"
+CRITICAL_SEC="$(( CRITICAL * 86400 ))"
+
+declare -A NAGIOS_STR=( [0]="OK" [1]="WARNING" [2]="CRITICAL" )
+LICENSES=()
+STATUS="0"
+
+# NOTE: the --list-fmt option is undocumented
+while read LINE
+do
+	# NOTE: I assumed that the license filename doesn't contains any : character
+	FNAME="${LINE%%:*}"
+	DATE="${LINE#*: }"
+	DATE="${DATE#*, }"
+	DATE="${DATE%%,*}"
+
+	DATE_SEC="$(date -d "$DATE" "+%s")"
+	FILE_STATUS="0"
+	(( NOW + WARNING_SEC >= DATE_SEC )) && FILE_STATUS=1
+	(( NOW + CRITICAL_SEC >= DATE_SEC )) && FILE_STATUS=2
+
+	LICENSES+=( "$FNAME: ${NAGIOS_STR[$FILE_STATUS]} - $DATE" )
+
+	(( FILE_STATUS > STATUS )) && STATUS="$FILE_STATUS"
+done < <("$ESETS_LIC" --list | sort)
+
+echo -n "${NAGIOS_STR[$STATUS]}; "
+( IFS=","; echo "${LICENSES[*]}" )
+
+exit "$STATUS"

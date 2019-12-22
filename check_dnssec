@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+DOMAIN=""
+WARNING="7"
+CRITICAL="2"
+
+while [[ -n "$1" ]]
+do
+	case "$1" in
+		"--critical" ) CRITICAL="$2" ;;
+		"--domain" ) DOMAIN="$2" ;;
+		"--warning" ) WARNING="$2" ;;
+	esac
+
+	shift 2
+done
+
+RESULT="$(dig RRSIG +short "$DOMAIN" 2>&1)"
+RETCODE="$?"
+
+if (( RETCODE != 0 ))
+then
+	echo "Invalid return code ($RETCODE)"
+	exit 3
+fi
+
+EXPIRE_RAW="$(grep ^SOA <<< "$RESULT" | cut -d' ' -f5)"
+EXPIRE_YEAR="${EXPIRE_RAW:0:4}"
+
+COUNTER=0
+for VARNAME in MONTH DAY HOUR MIN SEC
+do
+	eval "EXPIRE_$VARNAME=\"${EXPIRE_RAW:(( 4 + COUNTER * 2 )):2}\""
+	(( COUNTER++ ))
+done
+
+EXPIRE_STR="$EXPIRE_YEAR-$EXPIRE_MONTH-$EXPIRE_DAY $EXPIRE_HOUR:$EXPIRE_MIN:$EXPIRE_SEC"
+
+EXPIRE="$(date -d "$EXPIRE_STR" '+%s')"
+NOW="$(date '+%s')"
+
+if (( NOW + CRITICAL * 86400 >= EXPIRE ))
+then
+	echo "CRITICAL; DNSSEC signature will expire at $EXPIRE_STR"
+	exit 2
+fi
+
+if (( NOW + WARNING * 86400 >= EXPIRE ))
+then
+	echo "WARNING; DNSSEC signature will expire at $EXPIRE_STR"
+	exit 1
+fi
+
+echo "OK"
+exit 0
