@@ -53,6 +53,9 @@ do
 		# This is a false alarm on CentOS 7
 		[[ "$BIN" =~ ^/tmp/ && "$PROCNAME" == "tuned" ]] && continue
 
+		# This is a false alarm for Java applications using native libraries
+		[[ "$BIN" =~ ^/tmp/ && "$PROCNAME" == "java" ]] && continue
+
 		DELETED_BINARIES["$BIN"]="$(append_string "${DELETED_BINARIES[$BIN]}" "$PROCNAME[$PID]")"
 	fi
 done < <(grep ' (deleted)$' /proc/*/maps 2>&-)
