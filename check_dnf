@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import dnf
+import sys
+
+if __name__ == "__main__":
+
+	with dnf.Base() as base:
+		base.read_all_repos()
+		base.fill_sack()
+
+		updates = len( base.sack.query().upgrades().run() )
+		security_updates = len( base.sack.query().upgrades().filter( advisory_type__eq = "security" ).run() )
+
+	if updates == 0:
+		print( "OK - no updates available" )
+		sys.exit( 0 )
+	else:
+		if security_updates == 0:
+			print( "WARN - %d update(s) available" % ( updates ) )
+			sys.exit( 1 )
+		else:
+			print( "CRIT - %d update(s) available [%d security update(s)]" % ( updates, security_updates ) )
+			sys.exit( 2 )
