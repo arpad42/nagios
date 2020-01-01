@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+# encoding: UTF-8
+
+msgs = []
+retcode = 0
+
+File.foreach( "/proc/net/dev" ) do | line |
+	next if line.include?( "|" )
+	iface = line.split( ":" ).first.strip
+
+	if File.exists?( "/sys/class/net/#{iface}/operstate" ) and File.exists?( "/sys/class/net/#{iface}/carrier" )
+		if File.read( "/sys/class/net/#{iface}/operstate" ).chomp == "down"
+			msgs << "#{iface}: administratively down"
+		else
+			if File.read( "/sys/class/net/#{iface}/carrier" ).chomp == "1"
+				msgs << "#{iface}: up"
+			else
+				msgs << "#{iface}: DOWN"
+				retcode = 1
+			end
+		end
+	else
+		msgs << "#{iface}: UNKNOWN"
+		retcode = 1
+	end
+end
+
+puts( msgs.sort.join( "; " ) )
+exit( retcode )
