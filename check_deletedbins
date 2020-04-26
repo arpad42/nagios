@@ -56,6 +56,9 @@ do
 		# This is a false alarm for Java applications using native libraries
 		[[ "$BIN" =~ ^/tmp/ && "$PROCNAME" == "java" ]] && continue
 
+		# This is a false alarom for ESETS
+		[[ "$BIN" =~ ^/var/opt/eset/esets/lib/ && "$PROCNAME" == "esets_daemon" ]] && continue
+
 		DELETED_BINARIES["$BIN"]="$(append_string "${DELETED_BINARIES[$BIN]}" "$PROCNAME[$PID]")"
 	fi
 done < <(grep ' (deleted)$' /proc/*/maps 2>&-)
