@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+DO_CRON="0"
+DO_REFRESH="0"
+STATUS_FILE="/var/cache/check_glsa.cache"
+
+while (( $# > 0 ))
+do
+	case "$1" in
+		"-c" | "--cron" ) DO_CRON="1"
+		"-r" | "--refresh" ) DO_REFRESH="1"
+	esac
+
+	shift
+done
+
+(( DO_REFRESH == 1 )) && glsa-check -n -t all > "$STATUS_FILE" 2> /dev/null
+(( DO_CRON == 1 )) && exit 0
+
+if [[ ! -f "$STATUS_FILE" ]]
+then
+	echo "UNKNOWN; GLSA cache is missing at $STATUS_FILE!"
+	exit 3
+fi
+
+GLSA=()
+mapfile -t GLSA < "$STATUS_FILE"
+
+if (( ${#GLSA[@]} == 0 ))
+then
+	echo "OK"
+	exit 0
+else
+	echo "CRITICAL; System is affected by the following GLSAs: ${GLSA[@]}"
+	exit 2
+fi
