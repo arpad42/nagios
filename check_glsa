@@ -11,8 +11,8 @@ STATUS_FILE="/var/cache/check_glsa.cache"
 while (( $# > 0 ))
 do
 	case "$1" in
-		"-c" | "--cron" ) DO_CRON="1"
-		"-r" | "--refresh" ) DO_REFRESH="1"
+		"-c" | "--cron" ) DO_CRON="1" ;;
+		"-r" | "--refresh" ) DO_REFRESH="1" ;;
 	esac
 
 	shift
