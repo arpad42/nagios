@@ -50,6 +50,9 @@ do
 		(( $? != 0 )) && continue
 		PROCNAME="${PROCNAME##Name:	}"
 
+		# MemFD are not real
+		[[ "$BIN" =~ ^/memfd: ]] && continue
+
 		# This is a false alarm on CentOS 7
 		[[ "$BIN" =~ ^/tmp/ && "$PROCNAME" == "tuned" ]] && continue
 
