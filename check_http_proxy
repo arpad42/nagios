@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+### Helper funtcions
+usage()
+{
+	cat <<EOF
+		Usage:
+			check_http_proxy <options>
+
+		Options:
+
+			-e, --expected CODE	The expected HTTP code. Default: 200.
+			-h, --help		Shows this help.
+			-H, --proxy-host HOST	The hostname or IP of the proxy. Mandatory.
+			-p, --proxy-port PORT	The port of the proxy. Default: 3128.
+			-u, --url URL		The URL to access through the proxy. Mandatory.
+EOF
+
+	exit 0
+}
+
+### Main code
+PROXY_HOST=""
+PROXY_PORT="3128"
+URL=""
+EXPECTED_CODE="200"
+
+while (( $# > 0 ))
+do
+	case "$1" in
+		"-e" | "--expected" ) EXPECTED_CODE="$2" ;;
+		"-h" | "--help" ) usage ;;
+		"-H" | "--proxy-host" ) PROXY_HOST="$2" ;;
+		"-p" | "--proxy-port" ) PROXY_PORT="$2" ;;
+		"-u" | "--url" ) URL="$2" ;;
+	esac
+
+	shift 2
+done
+
+HTTP_CODE="$(curl --silent --proxy "$PROXY_HOST:$PROXY_PORT" --output /dev/null --write-out "%{http_code}" "$URL")"
+
+if (( HTTP_CODE == EXPECTED_CODE ))
+then
+	echo "OK"
+	exit 0
+else
+	echo "ERROR: Received $HTTP_CODE but expected $EXPECTED_CODE!"
+	exit 2
+fi
